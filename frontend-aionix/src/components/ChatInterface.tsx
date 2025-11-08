@@ -263,3 +263,4 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
           </div>
         </div>
   );
+        }
