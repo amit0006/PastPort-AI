@@ -177,7 +177,7 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EAD7C3] via-[#F8F3EE] to-[#EAD7C3] relative overflow-hidden">
-        {/* Background texture and vignette elements remain the same */}
+        {/* Background texture and vignette elements remain the same */}
 
       {/* Content */}
       <div className="relative z-10 h-screen flex flex-col">
