@@ -1,0 +1,39 @@
+Create an attractive Figma prototype for PastPort AI. Use the following exact spec:
+
+[Paste this block into Figma AI or give to designer]
+
+Project name: PastPort AI — "Talk to history, not just read it."
+
+Style:
+- Palette: background #EAD7C3 (parchment), text #1E1E1E, accent #B8860B (gold), secondary #F8F3EE.
+- Fonts: Heading Cinzel (or Playfair), Body Inter.
+- Aesthetic: vintage parchment + subtle modern UI elements; soft shadows; rounded buttons.
+
+Screens:
+1) Welcome
+- Title: PastPort AI
+- Subtitle: Talk to history, not just read it.
+- CTA: Begin Journey
+- Footer: "Responses are AI reconstructions, not verbatim."
+
+2) Persona Selection
+- 3 horizontal cards: Einstein, Gandhi, Cleopatra
+- Each card: portrait, Name, era, one-liner.
+- Button: Talk to [Name]
+- Microcopy: "Choose a figure to begin a conversation."
+
+3) Chat Screen
+- Left column persona panel (portrait, era, quote, replay last reply)
+- Right column chat (bubbles: persona left white, user right pale gold)
+- Bottom: mic icon (file upload), text input placeholder: "Ask a question...", Send button
+- When AI reply is playing, show play/pause and playback progress inside the persona bubble.
+
+4) About/Credits screen
+- Short tech stack list, ethics/disclaimer, team names.
+
+Deliverables:
+- Prototype flow Welcome -> Persona -> Chat
+- Export portrait images (256px)
+- Export CSS color & font tokens
+
+[End of Figma prompt]

@@ -1,0 +1,29 @@
+# PastPort AI - 60 Second Demo Video Instructions
+
+**Target Time:** 60-90 seconds. Speak clearly and confidently.
+
+**0:00 - 0:10 | INTRO & PITCH (Welcome Screen)**
+* **Action:** Show the Welcome Screen.
+* **Script:** "Hello, we are PastPort AI. We believe history should be experienced, not just read. We built an interactive AI platform that lets you talk to historical legends in their own voice and style."
+
+**0:10 - 0:25 | EINSTEIN DEMO (Persona Selection -> Chat Screen)**
+* **Action:** Click 'Begin Journey', select Albert Einstein.
+* **Script:** "Let's ask Albert Einstein a complex question about his work."
+* **Action:** Type and send: "How did you first conceive of time and gravity?" (Audio plays).
+* **AI Reply Focus:** Highlight the era-appropriate tone and scientific but simple explanation.
+
+**0:25 - 0:40 | GANDHI DEMO (Back -> Chat Screen)**
+* **Action:** Click 'Back', select Mahatma Gandhi.
+* **Script:** "Now, let us seek guidance from Mahatma Gandhi."
+* **Action:** Type and send: "What is the true power of non-violence in a conflict?" (Audio plays).
+* **AI Reply Focus:** Highlight the moral clarity and philosophical nature of the reply.
+
+**0:40 - 0:55 | CLEOPATRA DEMO (Optional/Quick)**
+* **Action:** Click 'Back', select Cleopatra.
+* **Script:** "Finally, a quick word with the Queen of the Nile, Cleopatra."
+* **Action:** Type and send: "How did you lead during hard times?" (Audio plays).
+* **AI Reply Focus:** Highlight the regal and confident tone.
+
+**0:55 - 1:05 | CONCLUSION & VISION**
+* **Action:** Show the final chat screen or go back to the Persona Selection.
+* **Script:** "PastPort AI transforms passive learning into an emotional, two-way experience. Imagine this in classrooms and museums—that’s the future of learning we’re creating. Thank you."
