@@ -38,8 +38,7 @@ const getInitialMessages = (): Message[] => [
   },
 ];
 
-
-// Helper function to prepare history for the backend API
+// Helper function to prepare history for the backend API (maps UI roles to API roles)
 const extractHistoryForApi = (messages: Message[]): APIMessage[] => {
     // We map the UI roles ('user', 'persona') to the API roles ('user', 'assistant')
     // and extract the last 6 messages (3 turns)
@@ -50,7 +49,7 @@ const extractHistoryForApi = (messages: Message[]): APIMessage[] => {
             role: msg.sender === 'persona' ? 'assistant' : 'user', 
             text: msg.text 
         }))
-        .slice(-6); 
+        .slice(-6); // Only send the last 6 messages (3 turns)
 };
 
 
@@ -59,7 +58,7 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const audioInputRef = useRef<HTMLInputElement>(null); // Ref for file input
+  const audioInputRef = useRef<HTMLInputElement>(null); 
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -70,7 +69,7 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
     const replayAudioUrl = messages.findLast(m => m.sender === 'persona')?.audioUrl;
 
 
-    // ---------------------- TEXT INPUT HANDLER ----------------------
+    // ---------------------- TEXT INPUT HANDLER (T2T -> TTS) ----------------------
   const handleSend = async () => { 
     if (!inputValue.trim() || isLoading) return;
 
@@ -121,18 +120,17 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
   };
 
 
-    // ---------------------- AUDIO INPUT HANDLER (S2S) ----------------------
+    // ---------------------- AUDIO INPUT HANDLER (STT -> T2T -> TTS) ----------------------
     const handleAudioUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || isLoading) return;
 
         setIsLoading(true);
-        // Clear the file input value so the user can upload the same file again
+        // Clear the file input value
         if (audioInputRef.current) audioInputRef.current.value = ''; 
 
         try {
             // A. Call Transcribe API (Orchestrates STT + LLM + TTS)
-            // Note: transcribed_text is the *user's spoken question*
             const s2sResponse = await postTranscribe(persona.id, file);
 
             // 1. User Message (Using the transcribed_text for the user's bubble)
@@ -179,30 +177,35 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EAD7C3] via-[#F8F3EE] to-[#EAD7C3] relative overflow-hidden">
-        {/* ... (Background and Header elements remain the same) ... */}
+      {/* Background texture and vignette elements remain the same */}
+
+      {/* Content */}
+      <div className="relative z-10 h-screen flex flex-col">
+        {/* Header (Back Button) */}
+        <div className="bg-[#F8F3EE]/90 backdrop-blur-sm border-b border-[#B8860B]/20 px-6 py-4 shadow-md">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-[#6B4B2C] hover:text-[#B8860B] transition-colors group"
+          >
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+            <span>Back to Selection</span>
+          </button>
+        </div>
 
         {/* Main Chat Area */}
-        <div className="relative z-10 h-screen flex flex-col">
-          <div className="bg-[#F8F3EE]/90 backdrop-blur-sm border-b border-[#B8860B]/20 px-6 py-4 shadow-md">
-            <button onClick={onBack} className="flex items-center gap-2 text-[#6B4B2C] hover:text-[#B8860B] transition-colors group">
-              <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-              <span>Back to Selection</span>
-            </button>
-          </div>
+        <div className="flex-1 flex gap-6 p-6 overflow-hidden">
+          {/* Left Panel - Persona Profile */}
+          <div className="w-80 flex-shrink-0 hidden lg:block">
+            <div className="bg-[#F8F3EE] rounded-2xl p-6 shadow-xl border border-[#B8860B]/20 sticky top-6">
+              {/* ... (Portrait and Info remain the same) ... */}
 
-          <div className="flex-1 flex gap-6 p-6 overflow-hidden">
-            {/* Left Panel - Persona Profile */}
-            <div className="w-80 flex-shrink-0 hidden lg:block">
-              <div className="bg-[#F8F3EE] rounded-2xl p-6 shadow-xl border border-[#B8860B]/20 sticky top-6">
-                {/* ... (Portrait and Info remain the same) ... */}
-
-                {/* Audio Player */}
-                <div className="pt-4 border-t border-[#B8860B]/20">
-                  <p className="text-xs text-[#6B4B2C] mb-2">Voice Playback</p>
-                  <AudioPlayer audioUrl={replayAudioUrl} />
-                </div>
+              {/* Audio Player */}
+              <div className="pt-4 border-t border-[#B8860B]/20">
+                <p className="text-xs text-[#6B4B2C] mb-2">Voice Playback</p>
+                <AudioPlayer audioUrl={replayAudioUrl} />
               </div>
             </div>
+          </div>
 
             {/* Right Panel - Chat Area */}
             <div className="flex-1 flex flex-col bg-[#F8F3EE]/50 backdrop-blur-sm rounded-2xl shadow-xl border border-[#B8860B]/20 overflow-hidden">
@@ -221,7 +224,7 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
                   <label htmlFor="audio-upload-input" className="p-3 rounded-xl bg-white hover:bg-[#B8860B]/10 text-[#B8860B] transition-colors flex-shrink-0 cursor-pointer disabled:opacity-50">
                     <Mic className="w-5 h-5" />
                     <input
-                        ref={audioInputRef} // Attach ref here
+                        ref={audioInputRef} 
                         id="audio-upload-input"
                         type="file"
                         accept="audio/*"
@@ -241,7 +244,7 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
                       rows={1}
                       disabled={isLoading}
                     />
-                  </div>
+                </div>
 
                   <button
                     onClick={handleSend}
