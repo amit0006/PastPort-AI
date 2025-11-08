@@ -1,0 +1,23 @@
+# Dependencies
+/node_modules
+/backend-aionix/node_modules
+/frontend-aionix/node_modules
+
+# Build/Artifacts
+/dist
+/build
+/out
+/logs
+
+# Environment Variables
+.env
+.env.local
+
+# IDE and OS Files
+.vscode/ # VS Code settings
+.idea/   # IntelliJ/WebStorm settings
+*.swp    # vim temporary files
+.DS_Store # Mac OS files
+Thumbs.db # Windows files
+
+# Add specific backend build/cache folders here if necessary (e.g., Python venv)

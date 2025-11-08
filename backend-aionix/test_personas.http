@@ -1,0 +1,14 @@
+### Check backend health
+GET http://localhost:8000/
+
+### List personas
+GET http://localhost:8000/api/v1/personas
+
+### Chat with Einstein
+POST http://localhost:8000/api/v1/chat?session_id=test123&persona_id=einstein&content=Hello+Einstein
+
+### Chat with Gandhi
+POST http://localhost:8000/api/v1/chat?session_id=test123&persona_id=gandhi&content=Hello+Bapu
+
+### Chat with Cleopatra
+POST http://localhost:8000/api/v1/chat?session_id=test123&persona_id=cleopatra&content=Hello+Queen
