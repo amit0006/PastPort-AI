@@ -170,8 +170,7 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      // CRITICAL: Use void handleSend() to suppress promise warning
-      void handleSend(); 
+      void handleSend();
     }
   };
 
@@ -198,7 +197,6 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
           <div className="w-80 flex-shrink-0 hidden lg:block">
             <div className="bg-[#F8F3EE] rounded-2xl p-6 shadow-xl border border-[#B8860B]/20 sticky top-6">
               {/* Portrait & Info */}
-                {/* Ensure your PersonaCard/Portrait component is placed here correctly */}
               <div className="flex flex-col items-center">
                 <ImageWithFallback src={persona.portrait} alt={persona.name} className="w-40 h-40 rounded-lg object-cover" />
                 <h3 className="mt-4 text-lg font-semibold text-[#6B4B2C]">{persona.name}</h3>
@@ -228,38 +226,41 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
               <div className="border-t border-[#B8860B]/20 bg-[#F8F3EE] p-4">
                 <div className="flex gap-3 items-end">
                   {/* Mic/Audio Input Button */}
-                  <label htmlFor="audio-upload-input" className="p-3 rounded-xl bg-white hover:bg-[#B8860B]/10 text-[#B8860B] transition-colors flex-shrink-0 cursor-pointer disabled:opacity-50">
+                  <label
+                    htmlFor="audio-upload-input"
+                    className="p-3 rounded-xl bg-white hover:bg-[#B8860B]/10 text-[#B8860B] transition-colors flex-shrink-0 cursor-pointer disabled:opacity-50"
+                  >
                     <Mic className="w-5 h-5" />
                     <input
-                        ref={audioInputRef} 
+                        ref={audioInputRef}
                         id="audio-upload-input"
                         type="file"
                         accept="audio/*"
                         onChange={handleAudioUpload}
                         disabled={isLoading}
-                        style={{display: 'none'}}
+                        style={{ display: 'none' }}
                     />
                   </label>
-                  
-                  <div className="flex-1 bg-white rounded-xl border border-[#B8860B]/20 focus-within:border-[#B8860B] transition-colors">
-                    <textarea
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={isLoading ? "Processing request..." : "Ask your question..."}
-                      className="w-full px-4 py-3 bg-transparent resize-none outline-none max-h-32"
-                      rows={1}
-                      disabled={isLoading}
-                    />
+
+                <div className="flex-1 bg-white rounded-xl border border-[#B8860B]/20 focus-within:border-[#B8860B] transition-colors">
+                  <textarea
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={isLoading ? 'Processing request...' : 'Ask your question...'}
+                    className="w-full px-4 py-3 bg-transparent resize-none outline-none max-h-32"
+                    rows={1}
+                    disabled={isLoading}
+                  />
                 </div>
 
-                  <button
-                    onClick={() => void handleSend()}
-                    disabled={!inputValue.trim() || isLoading}
-                    className="p-3 rounded-xl bg-gradient-to-r from-[#B8860B] to-[#D4AF37] text-white hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                  >
-                    <Send className="w-5 h-5" />
-                  </button>
+                <button
+                  onClick={() => void handleSend()}
+                  disabled={!inputValue.trim() || isLoading}
+                  className="p-3 rounded-xl bg-gradient-to-r from-[#B8860B] to-[#D4AF37] text-white hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
                 </div>
 
                 <p className="text-xs text-[#6B4B2C]/70 mt-3 text-center">
