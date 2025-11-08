@@ -4,10 +4,9 @@ import { Persona } from '../App';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import ChatBubble from './ChatBubble';
 import AudioPlayer from './AudioPlayer';
-// CRITICAL: Import the API functions
 import { postChat, postTranscribe } from '../api';
 
-// Define the API message structure for history payload
+// ---------------------- Types ----------------------
 type APIMessage = {
   role: 'user' | 'assistant';
   text: string;
@@ -26,7 +25,7 @@ type Message = {
   audioUrl?: string;
 };
 
-// Initial Messages - Simplified
+// ---------------------- Helper functions ----------------------
 const getInitialMessages = (): Message[] => [
   {
     id: '1',
@@ -36,17 +35,22 @@ const getInitialMessages = (): Message[] => [
   },
 ];
 
-// Helper function to prepare history for the backend API (maps UI roles to API roles)
-const extractHistoryForApi = (messages: Message[]): APIMessage[] => {
-  // Map UI roles ('user', 'persona') to API roles ('user', 'assistant')
-  // and extract the last 6 message entries (3 turns)
-  return messages
+// ✅ CRITICAL FIX: Ensure 'messages' is an array (use [] if undefined)
+const extractHistoryForApi = (messages: Message[] | undefined): APIMessage[] => {
+  // If messages is undefined, use an empty array
+  const messageArray = messages || [];
+
+  return messageArray
     .slice(1) // Skip the initial greeting message
-    .filter((msg) => msg.text.trim()) // Only send messages with text
-    .map((msg) => ({ role: msg.sender === 'persona' ? 'assistant' : 'user', text: msg.text }))
-    .slice(-6);
+    .filter((msg) => msg.text.trim()) // Ensure valid text
+    .map((msg) => ({
+      role: msg.sender === 'persona' ? 'assistant' : 'user',
+      text: msg.text,
+    }))
+    .slice(-6); // Only last 3 turns
 };
 
+// ---------------------- Component ----------------------
 export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>(getInitialMessages());
   const [inputValue, setInputValue] = useState('');
@@ -54,12 +58,12 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Auto-scroll to bottom when messages change
+  // Scroll to bottom on new message
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Safe findLast implementation (browsers may not support Array.prototype.findLast)
+  // Safe way to get last persona message
   const findLastPersonaMessage = (): Message | undefined => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].sender === 'persona') return messages[i];
@@ -67,10 +71,9 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
     return undefined;
   };
 
-  // Get the audio URL from the last AI message for the playback panel
   const replayAudioUrl = findLastPersonaMessage()?.audioUrl;
 
-  // ---------------------- TEXT INPUT HANDLER (T2T -> TTS) ----------------------
+  // ---------------------- TEXT INPUT HANDLER ----------------------
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
@@ -78,7 +81,6 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
     setIsLoading(true);
     setInputValue('');
 
-    // 1. Optimistic UI Update (User Message)
     const userMessage: Message = {
       id: Date.now().toString(),
       sender: 'user',
@@ -89,13 +91,12 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
     const messagesAfterUser = [...messages, userMessage];
     setMessages(messagesAfterUser);
 
+    // ✅ Use the safe helper
     const historyForApi = extractHistoryForApi(messagesAfterUser);
 
     try {
-      // A. Call Chat API (Orchestrates LLM + TTS)
       const response = await postChat(persona.id, userMessageText, historyForApi);
 
-      // 2. Final UI Update with AI Response and Audio URL
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'persona',
@@ -119,20 +120,17 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
     }
   };
 
-  // ---------------------- AUDIO INPUT HANDLER (STT -> T2T -> TTS) ----------------------
+  // ---------------------- AUDIO UPLOAD HANDLER ----------------------
   const handleAudioUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || isLoading) return;
 
     setIsLoading(true);
-    // Clear the file input value visually (we already have the file object)
     if (audioInputRef.current) audioInputRef.current.value = '';
 
     try {
-      // A. Call Transcribe API (Orchestrates STT + LLM + TTS)
       const s2sResponse = await postTranscribe(persona.id, file);
 
-      // 1. User Message (Using the transcribed_text for the user's bubble)
       const userMessage: Message = {
         id: Date.now().toString(),
         sender: 'user',
@@ -140,7 +138,6 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
         timestamp: new Date(),
       };
 
-      // 2. AI Message (The actual answer and audio URL)
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'persona',
@@ -149,7 +146,6 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
         audioUrl: s2sResponse.audio_url ?? undefined,
       };
 
-      // Update state with both messages
       setMessages((prev) => [...prev, userMessage, aiMessage]);
     } catch (error) {
       console.error('S2S API Failed:', error);
@@ -165,6 +161,7 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
     }
   };
 
+  // ---------------------- ENTER KEY HANDLER ----------------------
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -172,13 +169,23 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
     }
   };
 
+  // Defensive guard for undefined persona
+  if (!persona) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600">Persona data not loaded. Please go back and reselect.</p>
+        <button className="btn mt-3" onClick={onBack}>
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  // ---------------------- JSX RENDER ----------------------
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EAD7C3] via-[#F8F3EE] to-[#EAD7C3] relative overflow-hidden">
-      {/* Background texture and vignette elements remain the same */}
-
-      {/* Content */}
       <div className="relative z-10 h-screen flex flex-col">
-        {/* Header (Back Button) */}
+        {/* Header */}
         <div className="bg-[#F8F3EE]/90 backdrop-blur-sm border-b border-[#B8860B]/20 px-6 py-4 shadow-md">
           <button
             onClick={onBack}
@@ -191,18 +198,23 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
 
         {/* Main Chat Area */}
         <div className="flex-1 flex gap-6 p-6 overflow-hidden">
-          {/* Left Panel - Persona Profile */}
+          {/* Left Panel */}
           <div className="w-80 flex-shrink-0 hidden lg:block">
             <div className="bg-[#F8F3EE] rounded-2xl p-6 shadow-xl border border-[#B8860B]/20 sticky top-6">
-              {/* Portrait & Info */}
               <div className="flex flex-col items-center">
-                <ImageWithFallback src={persona.portrait} alt={persona.name} className="w-40 h-40 rounded-lg object-cover" />
+                <ImageWithFallback
+                  src={persona.portrait}
+                  alt={persona.name}
+                  className="w-40 h-40 rounded-lg object-cover"
+                />
                 <h3 className="mt-4 text-lg font-semibold text-[#6B4B2C]">{persona.name}</h3>
                 <p className="text-sm text-[#6B4B2C]/80">{persona.era}</p>
-                <p className="mt-3 text-sm text-[#4b3a2a]">{persona.prompt.slice(0, 140)}...</p>
+                <p className="mt-3 text-sm text-[#4b3a2a]">
+                  {(persona?.prompt ?? '').slice(0, 140)}
+                  {persona?.prompt ? '...' : ''}
+                </p>
               </div>
 
-              {/* Audio Player */}
               <div className="pt-4 border-t border-[#B8860B]/20">
                 <p className="text-xs text-[#6B4B2C] mb-2">Voice Playback</p>
                 <AudioPlayer audioUrl={replayAudioUrl} />
@@ -210,12 +222,12 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
             </div>
           </div>
 
-          {/* Right Panel - Chat Area */}
+          {/* Right Panel */}
           <div className="flex-1 flex flex-col bg-[#F8F3EE]/50 backdrop-blur-sm rounded-2xl shadow-xl border border-[#B8860B]/20 overflow-hidden">
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {messages.map((message) => (
-                <ChatBubble key={message.id} message={message} persona={persona} />
+              {messages.map((m) => (
+                <ChatBubble key={m.id} message={m} persona={persona} />
               ))}
               <div ref={chatEndRef} />
             </div>
@@ -223,7 +235,6 @@ export default function ChatInterface({ persona, onBack }: ChatInterfaceProps) {
             {/* Input Area */}
             <div className="border-t border-[#B8860B]/20 bg-[#F8F3EE] p-4">
               <div className="flex gap-3 items-end">
-                {/* Mic/Audio Input Button */}
                 <label
                   htmlFor="audio-upload-input"
                   className="p-3 rounded-xl bg-white hover:bg-[#B8860B]/10 text-[#B8860B] transition-colors flex-shrink-0 cursor-pointer disabled:opacity-50"
