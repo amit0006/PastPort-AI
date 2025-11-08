@@ -5,5 +5,5 @@ google-genai
 python-multipart 
 pydantic
 requests
+gunicorn
 httpx
-google-cloud-texttospeech
