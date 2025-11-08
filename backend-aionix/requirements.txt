@@ -1,9 +1,9 @@
 fastapi
 uvicorn
 python-dotenv
-# Change: Use native Google GenAI SDK instead of OpenAI SDK
-google-genai 
-httpx
+google-genai
 python-multipart 
 pydantic
 requests
+httpx
+google-cloud-texttospeech

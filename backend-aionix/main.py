@@ -10,7 +10,7 @@
 # # --- END LOAD ---
 
 # from fastapi import FastAPI, HTTPException, UploadFile, File
-# from fastapi.responses import JSONResponse, FileResponse
+# from fastapi.responses import JSONResponse, FileResponse # Removed Response import
 # from fastapi.middleware.cors import CORSMiddleware
 # from pydantic import BaseModel
 # from google import genai
@@ -23,19 +23,21 @@
 # # --- END FIX ---
 
 # # Import local utilities
-# from utils_tts import generate_tts, TEMP_AUDIO_DIR
+# # REMOVED: from utils_tts import generate_tts, TEMP_AUDIO_DIR
 # from utils_whisper import transcribe_audio
 
 # # --- SETUP AND CONFIGURATION ---
 
-# # 1. Read the key explicitly
+# # 1. Read the key explicitly from the environment
 # GEMINI_KEY = "AIzaSyAydDfeFKmJ8y6ygiz1ROdUsWvrPJNS_1o"
 
 # try:
 #     if not GEMINI_KEY:
+#         # If the key is not found, raise a configuration error
 #         raise ValueError("GEMINI_API_KEY environment variable is not set or loaded.")
 
-#     # 2. Initialize the native Gemini client by passing the key directly
+#     # 2. Explicitly set the key in os.environ and initialize client
+#     os.environ['GEMINI_API_KEY'] = GEMINI_KEY 
 #     client = genai.Client(api_key=GEMINI_KEY) 
     
 # except Exception as e:
@@ -52,10 +54,14 @@
 #     print("Error: personas.json not found.")
 #     PERSONAS = {}
     
+# # NOTE: TEMP_AUDIO_DIR is now defined locally since utils_tts is gone, 
+# # but it's still used by serve_audio.
+# TEMP_AUDIO_DIR = Path("tmp_audio") 
 # TEMP_AUDIO_DIR.mkdir(exist_ok=True)
+
 # BANNED_WORDS = ["bomb", "kill", "attack", "suicide", "harm"]
 
-# app = FastAPI(title="PastPort AI Backend (Gemini)")
+# app = FastAPI(title="PastPort AI Backend (Chat/Transcription)")
 
 # # Configure CORS
 # ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
@@ -78,9 +84,7 @@
 #     message: str
 #     history: List[HistoryItem] = []
 
-# class TTSPayload(BaseModel):
-#     persona: str
-#     text: str
+# # REMOVED: class TTSPayload(BaseModel):
 
 # # --- HELPER FUNCTIONS ---
 
@@ -96,9 +100,7 @@
     
 #     gemini_contents = []
     
-#     # 1. Start the content list with the system instruction and the first message
 #     if not history:
-#         # CASE 1: New Conversation (history is empty)
 #         gemini_contents.append(
 #             types.Content(
 #                 role="user", 
@@ -108,9 +110,6 @@
 #         return gemini_contents
 
 #     else:
-#         # CASE 2: Continuing Conversation (history exists)
-        
-#         # Combine system prompt with the *first* historical user message (history[0])
 #         first_turn_user_text = history[0].text
         
 #         gemini_contents.append(
@@ -120,9 +119,8 @@
 #             )
 #         )
 
-#         # Append the rest of the turns from history (skip the first element which we just handled)
 #         for turn in history[1:]: 
-#             role = "user" if turn.role == "user" else "model" 
+#             role = "user" if turn.role == "user" else "model" # Gemini uses 'model' for assistant role
 #             gemini_contents.append(
 #                 types.Content(
 #                     role=role, 
@@ -130,7 +128,6 @@
 #                 )
 #             )
         
-#         # Append the current user message separately
 #         gemini_contents.append(
 #             types.Content(
 #                 role="user", 
@@ -168,7 +165,6 @@
 #     persona = PERSONAS[data.persona]
 #     system_prompt = persona['prompt']
     
-#     # Truncate history to last 3 pairs (6 messages) before conversion
 #     gemini_contents = convert_history_to_gemini_format(data.history[-6:], system_prompt, data.message)
 
 #     try:
@@ -181,18 +177,10 @@
 #             )
 #         )
         
-#         # --- FIX: Null Check for Empty Response ---
-#         if response.text is None:
-#             # This happens if content is blocked by safety filter or model returns empty text.
-#             print(f"Gemini Chat Warning: Received empty response from model.")
-#             ai_reply = "I apologize, the stream of history is momentarily obscured. Please rephrase your question."
-#         else:
-#             ai_reply = response.text.strip()
-#         # --- END FIX ---
+#         ai_reply = response.text.strip() if response.text else "I apologize, the stream of history is momentarily obscured. Please rephrase your question."
         
 #     except Exception as e:
 #         print(f"Gemini Chat Error: {e}")
-#         # This will be raised if the API key is rejected or quota is exceeded
 #         raise HTTPException(status_code=503, detail="LLM_api_unavailable")
 
 #     return {"reply": ai_reply}
@@ -202,8 +190,10 @@
 # async def transcribe_endpoint(audio: UploadFile = File(...)):
 #     """POST /api/transcribe: Transcribes an uploaded audio file using Gemini."""
     
+#     if not client: 
+#         raise HTTPException(status_code=503, detail="transcribe_unavailable: Gemini Client not initialized.")
+        
 #     try:
-#         # utils_whisper.py uses the global Gemini client for transcription
 #         transcribed_text = await transcribe_audio(audio) 
 #         return {"text": transcribed_text}
 #     except RuntimeError as e:
@@ -211,31 +201,37 @@
 #             raise HTTPException(status_code=503, detail="transcribe_unavailable")
 #         raise HTTPException(status_code=500, detail="Transcription failed")
 #     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
+#         print(f"Transcription failure detail: {e}")
+#         raise HTTPException(status_code=503, detail="transcribe_unavailable")
 
 
-# @app.post('/api/tts')
-# async def tts_endpoint(data: TTSPayload):
-#     """POST /api/tts: Generates text-to-speech audio."""
-#     # utils_tts.py uses Gemini TTS or ElevenLabs fallback
-#     audio_url = await generate_tts(data.persona, data.text, PERSONAS)
-    
-#     if not audio_url:
-#         return JSONResponse(status_code=204, content={"error": "TTS unavailable or failed. Showing text only."})
+# # --- TTS Restoration Points ---
+# # NOTE: To re-enable Speech-to-Speech:
+# # 1. Restore the 'utils_tts.py' file and install dependencies.
+# # 2. Uncomment/Restore the two endpoints below.
 
-#     return {"audio_url": audio_url}
+# # @app.post('/api/tts')
+# # async def tts_endpoint(data: TTSPayload):
+# #     """POST /api/tts: Generates text-to-speech audio."""
+# #     # audio_url = await generate_tts(data.persona, data.text, PERSONAS)
+# #     # if not audio_url:
+# #     #     return Response(status_code=204)
+# #     # return {"audio_url": audio_url}
+# #     raise HTTPException(status_code=501, detail="TTS functionality is currently disabled.")
 
 
 # @app.get('/api/audio/{filename}')
 # async def serve_audio(filename: str):
 #     """GET /api/audio/{filename}: Serves the temporary audio file."""
     
+#     # This endpoint is kept in case the client attempts to access a cached audio file.
 #     file_path = TEMP_AUDIO_DIR / filename
     
 #     if not file_path.is_file():
 #         raise HTTPException(status_code=404, detail="File not found")
         
 #     return FileResponse(file_path, media_type='audio/mpeg')
+# # --- END TTS Restoration Points ---
 
 import os
 import json
@@ -248,8 +244,7 @@ DOTENV_PATH = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=DOTENV_PATH) 
 # --- END LOAD ---
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
-# CRITICAL FIX 1: Add Response import for 204 status code
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.responses import JSONResponse, FileResponse, Response 
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -262,26 +257,21 @@ import sys
 sys.path.append(str(Path(__file__).parent)) 
 # --- END FIX ---
 
-# Import local utilities (They will now see the loaded environment variables)
+# Import local utilities
 from utils_tts import generate_tts, TEMP_AUDIO_DIR
 from utils_whisper import transcribe_audio
 
 # --- SETUP AND CONFIGURATION ---
 
 # 1. Read the key explicitly from the environment
-# CRITICAL FIX 2: Revert hardcoding; read key from environment variable
 GEMINI_KEY = "AIzaSyAydDfeFKmJ8y6ygiz1ROdUsWvrPJNS_1o"
 
 try:
     if not GEMINI_KEY:
-        # If the key is not found, raise a configuration error
         raise ValueError("GEMINI_API_KEY environment variable is not set or loaded.")
 
-    # 2. ***CRITICAL FIX 3: Explicitly set the key in os.environ***
-    # This guarantees the key is available for Uvicorn's subprocesses and utility files.
-    os.environ['GEMINI_API_KEY'] = GEMINI_KEY
-    
-    # 3. Initialize the native Gemini client (it will now read from os.environ or the direct key argument)
+    # 2. Explicitly set the key in os.environ and initialize client
+    os.environ['GEMINI_API_KEY'] = GEMINI_KEY 
     client = genai.Client(api_key=GEMINI_KEY) 
     
 except Exception as e:
@@ -298,10 +288,12 @@ except FileNotFoundError:
     print("Error: personas.json not found.")
     PERSONAS = {}
     
+TEMP_AUDIO_DIR = Path("tmp_audio")
 TEMP_AUDIO_DIR.mkdir(exist_ok=True)
+
 BANNED_WORDS = ["bomb", "kill", "attack", "suicide", "harm"]
 
-app = FastAPI(title="PastPort AI Backend (Gemini)")
+app = FastAPI(title="PastPort AI Backend (Text + Speech)")
 
 # Configure CORS
 ALLOW_ORIGINS = os.getenv("ALLOW_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
@@ -336,15 +328,11 @@ def sanitize_message(message: str) -> bool:
     return any(word in message_lower for word in BANNED_WORDS)
 
 def convert_history_to_gemini_format(history: List[HistoryItem], system_prompt: str, user_message: str) -> List[types.Content]:
-    """
-    Converts the history list into the Gemini SDK Content format.
-    """
+    """Converts the history list into the Gemini SDK Content format."""
     
     gemini_contents = []
     
-    # 1. Start the content list with the system instruction and the first message
     if not history:
-        # CASE 1: New Conversation (history is empty)
         gemini_contents.append(
             types.Content(
                 role="user", 
@@ -354,9 +342,6 @@ def convert_history_to_gemini_format(history: List[HistoryItem], system_prompt: 
         return gemini_contents
 
     else:
-        # CASE 2: Continuing Conversation (history exists)
-        
-        # Combine system prompt with the *first* historical user message (history[0])
         first_turn_user_text = history[0].text
         
         gemini_contents.append(
@@ -366,9 +351,8 @@ def convert_history_to_gemini_format(history: List[HistoryItem], system_prompt: 
             )
         )
 
-        # Append the rest of the turns from history (skip the first element which we just handled)
         for turn in history[1:]: 
-            role = "user" if turn.role == "user" else "model" # Gemini uses 'model' for assistant role
+            role = "user" if turn.role == "user" else "model" 
             gemini_contents.append(
                 types.Content(
                     role=role, 
@@ -376,7 +360,6 @@ def convert_history_to_gemini_format(history: List[HistoryItem], system_prompt: 
                 )
             )
         
-        # Append the current user message separately
         gemini_contents.append(
             types.Content(
                 role="user", 
@@ -384,6 +367,49 @@ def convert_history_to_gemini_format(history: List[HistoryItem], system_prompt: 
             )
         )
         return gemini_contents
+
+
+# --- CORE PROCESSING FUNCTION (Used by both /chat and /transcribe) ---
+
+async def generate_response_and_audio(persona_id: str, user_message: str, history: List[HistoryItem]):
+    """Generates the LLM reply and the corresponding audio URL."""
+    
+    if not client: 
+        raise HTTPException(status_code=503, detail="LLM_api_unavailable: Gemini Client not initialized.")
+
+    if persona_id not in PERSONAS:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    
+    persona = PERSONAS[persona_id]
+    system_prompt = persona['prompt']
+    
+    gemini_contents = convert_history_to_gemini_format(history[-6:], system_prompt, user_message)
+
+    try:
+        # 1. GENERATE TEXT REPLY
+        response = client.models.generate_content(
+            model=LLM_MODEL, 
+            contents=gemini_contents,
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=300
+            )
+        )
+        ai_reply_text = response.text.strip() if response.text else None
+        
+        if not ai_reply_text:
+            ai_reply_text = "I apologize, the stream of history is momentarily obscured. Please rephrase your question."
+
+        # 2. GENERATE AUDIO 
+        audio_url = await generate_tts(persona_id, ai_reply_text, PERSONAS)
+        
+    except Exception as e:
+        print(f"Gemini/TTS Error: {e}")
+        # If any step fails, return the error message in the reply text, and no audio.
+        return {"reply": f"SYSTEM ERROR: Audio generation failed ({e}). Text reply available.", "audio_url": None}
+
+    # 3. Return both outputs
+    return {"reply": ai_reply_text, "audio_url": audio_url}
 
 
 # --- ENDPOINTS ---
@@ -400,71 +426,62 @@ async def list_personas():
 
 @app.post('/api/chat')
 async def chat(data: ChatPayload):
-    """POST /api/chat: Handles chat interaction with a persona."""
-    
-    if not client: 
-        raise HTTPException(status_code=503, detail="LLM_api_unavailable: Gemini Client not initialized.")
-
-    if data.persona not in PERSONAS:
-        raise HTTPException(status_code=404, detail="Persona not found")
-    
+    """
+    POST /api/chat: Text-in, Text/Speech-out (T2T -> TTS).
+    This handles user text input and orchestrates LLM and TTS.
+    """
     if sanitize_message(data.message):
         return JSONResponse(content={"reply": "I cannot help with that request."})
 
-    persona = PERSONAS[data.persona]
-    system_prompt = persona['prompt']
-    
-    # Truncate history to last 3 pairs (6 messages) before conversion
-    gemini_contents = convert_history_to_gemini_format(data.history[-6:], system_prompt, data.message)
-
-    try:
-        response = client.models.generate_content(
-            model=LLM_MODEL, 
-            contents=gemini_contents,
-            config=types.GenerateContentConfig(
-                temperature=0.7,
-                max_output_tokens=300
-            )
-        )
-        
-        # FIX: Null Check for Empty Response
-        ai_reply = response.text.strip() if response.text else "I apologize, the stream of history is momentarily obscured. Please rephrase your question."
-        
-    except Exception as e:
-        print(f"Gemini Chat Error: {e}")
-        raise HTTPException(status_code=503, detail="LLM_api_unavailable")
-
-    return {"reply": ai_reply}
+    # Call the shared function to get both reply text and audio URL
+    result = await generate_response_and_audio(data.persona, data.message, data.history)
+    return result
 
 
 @app.post('/api/transcribe')
-async def transcribe_endpoint(audio: UploadFile = File(...)):
-    """POST /api/transcribe: Transcribes an uploaded audio file using Gemini."""
+async def transcribe_endpoint(persona: str = Query(..., description="The ID of the persona to chat with"), audio: UploadFile = File(...)):
+    """
+    POST /api/transcribe: Audio-in, Text/Speech-out (STT -> LLM -> TTS).
+    This handles user audio input and orchestrates the full pipeline.
+    """
     
-    if not client: 
-        raise HTTPException(status_code=503, detail="transcribe_unavailable: Gemini Client not initialized.")
-        
+    # 1. STT: Transcribe Audio (Output: User's Question Text)
     try:
-        # NOTE: utils_whisper.py now uses the global client implicitly
         transcribed_text = await transcribe_audio(audio) 
-        return {"text": transcribed_text}
-    except RuntimeError as e:
-        if str(e) == "transcribe_unavailable":
-            raise HTTPException(status_code=503, detail="transcribe_unavailable")
-        raise HTTPException(status_code=500, detail="Transcription failed")
     except Exception as e:
-        print(f"Transcription failure detail: {e}")
+        # Re-raise the custom exception details
         raise HTTPException(status_code=503, detail="transcribe_unavailable")
+    
+    # Safety Check and Sanitization
+    if not transcribed_text or sanitize_message(transcribed_text):
+        return JSONResponse(content={"reply": "I could not understand the question or it was inappropriate.", "audio_url": None})
+
+    # 2. LLM + TTS: Generate Response and Audio
+    # CRITICAL: Call the shared function to get the text reply AND the audio URL.
+    try:
+        # Use transcribed text as the user's message with empty history
+        result = await generate_response_and_audio(persona, transcribed_text, [])
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"Generation/TTS failure detail: {e}")
+        raise HTTPException(status_code=503, detail="LLM/TTS failure")
+
+    # 3. Final Output Construction
+    # CRITICAL FIX: Ensure 'transcribed_text' holds the user's question, not the AI's answer.
+    # The result already contains {"reply": AI_ANSWER, "audio_url": URL}
+    result["transcribed_text"] = transcribed_text 
+    
+    return result
 
 
 @app.post('/api/tts')
 async def tts_endpoint(data: TTSPayload):
-    """POST /api/tts: Generates text-to-speech audio."""
-    # utils_tts.py uses Gemini TTS or ElevenLabs fallback
+    """POST /api/tts: Generates text-to-speech audio (kept for external calls)."""
+    # utils_tts.py uses ElevenLabs/GCP TTS
     audio_url = await generate_tts(data.persona, data.text, PERSONAS)
     
     if not audio_url:
-        # CRITICAL FIX: Return an empty Response with status 204 to adhere to protocol
         return Response(status_code=204)
 
     return {"audio_url": audio_url}
