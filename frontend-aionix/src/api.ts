@@ -2,77 +2,72 @@
 
 // Define the shape of a message sent in the API payload
 interface APIMessage {
-  role: 'user' | 'assistant';
-  text: string;
+  role: 'user' | 'assistant';
+  text: string;
 }
 
-// Function to call the chat endpoint
-export const postChat = async (persona: string, message: string, history: APIMessage[]) => {
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // Match the FastAPI backend body structure
-      body: JSON.stringify({ persona, message, history }),
-    });
+// Define the expected unified response structure
+interface UnifiedChatResponse {
+    reply: string;
+    audio_url: string | null;
+    // Optional: for the /transcribe endpoint
+    transcribed_text?: string; 
+}
 
+// CRITICAL FIX: Base URL must be the public endpoint in deployment
+const API_BASE_URL = import.meta.env.VITE_PUBLIC_API_URL || ''; 
+// If deployed, VITE_PUBLIC_API_URL must be set (e.g., https://your-app.onrender.com)
+// If running locally with Vite proxy, set to empty string: ''
+
+// Helper to handle fetch responses and errors
+async function handleResponse(response: Response): Promise<UnifiedChatResponse> {
     if (!response.ok) {
-      const errorDetail = await response.json().catch(() => ({}));
-      throw new Error(errorDetail.detail || `HTTP error! status: ${response.status}`);
+        const errorDetail = await response.json().catch(() => ({}));
+        throw new Error(errorDetail.detail || `HTTP error! status: ${response.status}`);
     }
-
-    // ✅ Return the backend response object, which contains: { reply: "...text..." }
     return response.json();
-  } catch (error) {
-    console.error('Chat API failed:', error);
-    throw error;
-  }
+}
+
+/** * ✅ PRIMARY ENDPOINT: POST /api/chat
+ * Handles T2T and TTS generation in a single backend call.
+ * * @returns { reply, audio_url }
+ */
+export const postChat = async (persona: string, message: string, history: APIMessage[]): Promise<UnifiedChatResponse> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persona, message, history }),
+    });
+
+    return handleResponse(response);
+  } catch (error) {
+    console.error('Chat API failed:', error);
+    throw error;
+  }
 };
 
-// Function to call the Text-to-Speech (TTS) endpoint
-export const postTTS = async (persona: string, text: string) => {
-  try {
-    const response = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ persona, text }),
-    });
 
-    if (response.status === 204) {
-      // Return null if backend couldn’t generate audio
-      return { audio_url: null };
-    }
+/** * ✅ SECONDARY ENDPOINT: POST /api/transcribe
+ * Handles the full S2S pipeline: STT -> LLM -> TTS in one backend call.
+ * * @returns { reply, audio_url, transcribed_text }
+ */
+export const postTranscribe = async (persona: string, audioFile: File): Promise<UnifiedChatResponse> => {
+  try {
+    const formData = new FormData();
+    formData.append('audio', audioFile);
 
-    if (!response.ok) {
-      throw new Error(`TTS API failed with status ${response.status}`);
-    }
+    const response = await fetch(`${API_BASE_URL}/api/transcribe?persona=${persona}`, {
+      method: 'POST',
+      body: formData,
+    });
 
-    // ✅ Backend returns something like: { audio_url: "/api/audio/cleopatra-1234.mp3" }
-    return response.json();
-  } catch (error) {
-    console.error('TTS API failed:', error);
-    throw error;
-  }
+    // The backend may return 503 if the transcription service is down.
+    return handleResponse(response);
+  } catch (error) {
+    console.error('Transcription API failed:', error);
+    throw error;
+  }
 };
 
-// Optional: Speech-to-text transcription (mic button)
-export const postTranscribe = async (audioFile: File) => {
-  try {
-    const formData = new FormData();
-    formData.append('audio', audioFile);
-
-    const response = await fetch('/api/transcribe', {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Transcription failed with status ${response.status}`);
-    }
-
-    return response.json();
-  } catch (error) {
-    console.error('Transcription API failed:', error);
-    throw error;
-  }
-};
+// NOTE: The separate postTTS function is REMOVED as its logic is now contained within postChat.
