@@ -4,47 +4,41 @@ from google.genai import types
 from fastapi import UploadFile
 from pathlib import Path
 
-# --- TEMPORARY DEBUG FIX ---
-# NOTE: Replace the key here if you are still debugging the 400 error.
-TEMP_HARDCODED_GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-# --- END TEMPORARY DEBUG FIX ---
-
+# --- Initialization ---
 TEMP_AUDIO_DIR = Path("tmp_audio")
 TEMP_AUDIO_DIR.mkdir(exist_ok=True)
 
+# NOTE: We do not use the hardcoded key or os.getenv() globally here.
+# The key is retrieved inside the function.
 
 async def transcribe_audio(audio_file: UploadFile) -> str:
     """
-    Directly answers the question in the audio file by instructing the model 
-    to combine transcription and response generation.
+    Transcribes the audio into text using Gemini's multimodal capability.
+    This function's sole purpose is to return the user's spoken question.
     """
     
-    # Initialization and error handling (relies on key being hardcoded/set)
+    # 1. Initialize client inside the function (CRITICAL FIX)
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        print("Gemini client initialization failed: GEMINI_API_KEY missing in transcribe function.")
+        raise RuntimeError("transcribe_unavailable")
+
     try:
-        if not TEMP_HARDCODED_GEMINI_KEY or "YOUR_ACTUAL_GEMINI_KEY" in TEMP_HARDCODED_GEMINI_KEY:
-            raise EnvironmentError("Temporary key is missing or is the placeholder value.")
-            
-        local_client = genai.Client(api_key=TEMP_HARDCODED_GEMINI_KEY)
-        
+        local_client = genai.Client(api_key=gemini_key)
     except Exception as e:
-        print(f"Gemini client initialization failed: {e}")
-        # The 400 API_KEY_INVALID error is caught here
+        print(f"Gemini client failed to initialize with key: {e}")
         raise RuntimeError("transcribe_unavailable")
 
 
-    # 1. Prepare the Multimodal Instruction
-    # We must explicitly tell the model to *answer* the audio content.
-    audio_instruction = (
-        "The audio contains a question from the user. "
-        "Answer the question in the audio using the persona system prompt "
-        "defined for the chat session. Do not just transcribe the speech; answer it directly."
-    )
+    # 2. Prepare the Multimodal Instruction (Focus ONLY on Transcription)
+    # The persona instruction is handled later in main.py's chat call.
+    audio_instruction = "Transcribe the speech found in the audio file into text."
     
     # Read file content
     file_content = await audio_file.read()
     
     try:
-        # 2. Make the Multimodal Call
+        # 3. Make the Multimodal Call
         response = local_client.models.generate_content(
             model='gemini-2.5-flash-lite', 
             contents=[
@@ -56,9 +50,12 @@ async def transcribe_audio(audio_file: UploadFile) -> str:
             ]
         )
         
-        # 3. Return the Model's Answer
-        # This will be the actual response to the question in the audio.
-        return response.text.strip()
+        # 4. Return the Model's Text Output (The Transcription)
+        if response.text:
+            return response.text.strip()
+        else:
+            print("Gemini Transcription Warning: Received empty text response.")
+            return ""
     
     except Exception as e:
         print(f"Gemini Transcription Error: {e}")
