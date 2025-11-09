@@ -6,7 +6,7 @@ from pathlib import Path
 
 # --- TEMPORARY DEBUG FIX ---
 # NOTE: Replace the key here if you are still debugging the 400 error.
-TEMP_HARDCODED_GEMINI_KEY = "AIzaSyAydDfeFKmJ8y6ygiz1ROdUsWvrPJNS_1o"
+TEMP_HARDCODED_GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 # --- END TEMPORARY DEBUG FIX ---
 
 TEMP_AUDIO_DIR = Path("tmp_audio")
