@@ -28,21 +28,8 @@ from utils_whisper import transcribe_audio
 
 # --- SETUP AND CONFIGURATION ---
 
-# 1. Read the key explicitly from the environment
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-
-try:
-    if not GEMINI_KEY:
-        raise ValueError("GEMINI_API_KEY environment variable is not set or loaded.")
-
-    # 2. Explicitly set the key in os.environ and initialize client
-    os.environ['GEMINI_API_KEY'] = GEMINI_KEY 
-    client = genai.Client(api_key=GEMINI_KEY) 
-    
-except Exception as e:
-    print(f"FATAL: Gemini client initialization failed. Error: {e}")
-    client = None 
-
+# Global client variable must be defined as None
+client = None 
 LLM_MODEL = "gemini-2.5-flash-lite" # The model used for chat completions
 
 # Load personas data
@@ -84,6 +71,32 @@ class ChatPayload(BaseModel):
 class TTSPayload(BaseModel):
     persona: str
     text: str
+
+# --- CORE CLIENT INITIALIZATION FIX ---
+
+def get_or_initialize_gemini_client():
+    """Initializes the global client lazily, ensuring environment secrets are loaded."""
+    global client
+    if client is not None:
+        return client
+
+    # Read the key only when the function is called
+    GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+    
+    if not GEMINI_KEY:
+        raise HTTPException(
+            status_code=503, 
+            detail="LLM_api_unavailable: GEMINI_API_KEY is missing from environment secrets."
+        )
+
+    try:
+        # Initialize and store the client globally
+        client = genai.Client(api_key=GEMINI_KEY)
+        return client
+    except Exception as e:
+        # Catch any connection or API key error during late initialization
+        raise HTTPException(status_code=503, detail=f"LLM_api_unavailable: Gemini client failed to connect. {e}")
+
 
 # --- HELPER FUNCTIONS ---
 
@@ -134,13 +147,13 @@ def convert_history_to_gemini_format(history: List[HistoryItem], system_prompt: 
         return gemini_contents
 
 
-# --- CORE PROCESSING FUNCTION (Used by both /chat and /transcribe) ---
+# --- CORE PROCESSING FUNCTION (Uses the lazy client) ---
 
 async def generate_response_and_audio(persona_id: str, user_message: str, history: List[HistoryItem]):
     """Generates the LLM reply and the corresponding audio URL."""
     
-    if not client: 
-        raise HTTPException(status_code=503, detail="LLM_api_unavailable: Gemini Client not initialized.")
+    # CRITICAL: Initialize client here when the function is first called
+    local_client = get_or_initialize_gemini_client() 
 
     if persona_id not in PERSONAS:
         raise HTTPException(status_code=404, detail="Persona not found")
@@ -151,8 +164,8 @@ async def generate_response_and_audio(persona_id: str, user_message: str, histor
     gemini_contents = convert_history_to_gemini_format(history[-6:], system_prompt, user_message)
 
     try:
-        # 1. GENERATE TEXT REPLY
-        response = client.models.generate_content(
+        # 1. GENERATE TEXT REPLY (Using local_client)
+        response = local_client.models.generate_content(
             model=LLM_MODEL, 
             contents=gemini_contents,
             config=types.GenerateContentConfig(
@@ -168,6 +181,9 @@ async def generate_response_and_audio(persona_id: str, user_message: str, histor
         # 2. GENERATE AUDIO 
         audio_url = await generate_tts(persona_id, ai_reply_text, PERSONAS)
         
+    except HTTPException as e:
+        # Re-raise explicit HTTP exceptions
+        raise e
     except Exception as e:
         print(f"Gemini/TTS Error: {e}")
         # If any step fails, return the error message in the reply text, and no audio.
@@ -210,7 +226,7 @@ async def transcribe_endpoint(persona: str = Query(..., description="The ID of t
     This handles user audio input and orchestrates the full pipeline.
     """
     
-    # 1. STT: Transcribe Audio (Output: User's Question Text)
+    # 1. STT: Transcribe Audio
     try:
         transcribed_text = await transcribe_audio(audio) 
     except Exception as e:
@@ -222,9 +238,7 @@ async def transcribe_endpoint(persona: str = Query(..., description="The ID of t
         return JSONResponse(content={"reply": "I could not understand the question or it was inappropriate.", "audio_url": None})
 
     # 2. LLM + TTS: Generate Response and Audio
-    # CRITICAL: Call the shared function to get the text reply AND the audio URL.
     try:
-        # Use transcribed text as the user's message with empty history
         result = await generate_response_and_audio(persona, transcribed_text, [])
     except HTTPException as e:
         raise e
@@ -232,10 +246,8 @@ async def transcribe_endpoint(persona: str = Query(..., description="The ID of t
         print(f"Generation/TTS failure detail: {e}")
         raise HTTPException(status_code=503, detail="LLM/TTS failure")
 
-    # 3. Final Output Construction
-    # CRITICAL FIX: Ensure 'transcribed_text' holds the user's question, not the AI's answer.
-    # The result already contains {"reply": AI_ANSWER, "audio_url": URL}
-    result["transcribed_text"] = transcribed_text 
+    # 3. Add the transcribed text to the response so the frontend can display the user's input
+    result["transcribed_text"] = transcribed_text
     
     return result
 
