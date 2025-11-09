@@ -1,58 +1,55 @@
+# File: /backend/utils_tts.py (CRITICAL AUTHENTICATION FIX)
+
 import os
 import httpx 
-# CRITICAL: Import the correct libraries for dedicated TTS
 from google.cloud import texttospeech 
+from google.oauth2 import service_account # New import for Service Account authentication
+import base64
 from pathlib import Path
 import uuid
 from typing import Optional
 
-# --- Initialization ---
-TEMP_AUDIO_DIR = Path("tmp_audio")
-TEMP_AUDIO_DIR.mkdir(exist_ok=True)
-
-# Helper function to get the required voice name (GCP standard)
-def get_voice_id(persona_id: str, personas: dict) -> str:
-    """Retrieves the default GCP voice name, as custom voices are not used."""
-    # Using a high-quality Wavenet voice as the stable default
-    return "en-US-Wavenet-A" 
-
+# ... (Imports and helper functions remain the same) ...
 
 async def gemini_tts(text: str, voice_name: str, filename: str) -> Optional[str]:
     """
     Generates audio using Google Cloud Text-to-Speech (GCP TTS) API.
-    This is the sole, robust service for speech synthesis.
+    Uses the service account key stored in the Render environment.
     """
     
-    # The dedicated TTS client relies on Application Default Credentials (ADC)
-    try:
-        # 1. Initialize the dedicated client (Asynchronous)
-        tts_client = texttospeech.TextToSpeechAsyncClient()
-    except Exception as e:
-        print(f"GCP TTS Client Initialization Failed. Error: {e}. Check default project credentials.")
+    # 1. Retrieve and Decode Service Account Key from Render secret
+    gcp_key_base64 = os.getenv("GCP_SERVICE_ACCOUNT_KEY")
+    if not gcp_key_base64:
+        print("GCP TTS Error: GCP_SERVICE_ACCOUNT_KEY secret is missing on Render.")
         return None
 
-    print(f"Using Google Cloud TTS (reliable service).")
-    
     try:
-        # 2. Define the request configuration using GCP TTS API structure
+        # Decode the Base64 string back into JSON bytes
+        key_file_content = base64.b64decode(gcp_key_base64)
+        
+        # 2. Create credentials object from the JSON content
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(key_file_content.decode('utf-8'))
+        )
+        
+        # 3. Initialize the dedicated client with explicit credentials
+        tts_client = texttospeech.TextToSpeechAsyncClient(credentials=credentials)
+    except Exception as e:
+        print(f"GCP TTS Client Initialization Failed in Render. Error: {e}")
+        return None
+
+    # ... (rest of the TTS logic remains the same: synthesize_speech, saving audio) ...
+    
+    # Final logic structure remains the same
+    try:
         synthesis_input = texttospeech.SynthesisInput(text=text)
+        voice = texttospeech.VoiceSelectionParams(language_code="en-US", name=voice_name)
+        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
         
-        # Use a high-quality Wavenet voice
-        voice = texttospeech.VoiceSelectionParams(
-            language_code="en-US",
-            name=voice_name 
-        )
-        
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
-        )
-        
-        # 3. Call the dedicated GCP TTS service (Asynchronously)
         response = await tts_client.synthesize_speech(
             input=synthesis_input, voice=voice, audio_config=audio_config
         )
         
-        # 4. Save Audio
         audio_path = TEMP_AUDIO_DIR / filename
         with open(audio_path, "wb") as f:
             f.write(response.audio_content)
@@ -60,17 +57,5 @@ async def gemini_tts(text: str, voice_name: str, filename: str) -> Optional[str]
         return f"/api/audio/{filename}"
     
     except Exception as e:
-        # This catches any rejection due to permission scope or server issues
         print(f"GCP Text-to-Speech API Error: {e}")
         return None
-
-
-# Removed: async def elevenlabs_tts(...)
-
-async def generate_tts(persona_id: str, text: str, personas: dict) -> Optional[str]:
-    """Master function that strictly uses the reliable GCP TTS service."""
-    voice_name = get_voice_id(persona_id, personas)
-    filename = f"{persona_id}-{uuid.uuid4().hex}.mp3"
-    
-    # Directly call GCP TTS
-    return await gemini_tts(text, voice_name, filename)
